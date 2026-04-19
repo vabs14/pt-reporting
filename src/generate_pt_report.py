@@ -204,6 +204,7 @@ def read_xl(path):
     flow=dict(start=int(rf["Start Residents"]),admissions=int(rf["Admissions"]),
               deceased=int(rf["Discharged(Total)"]),moved_out=int(rf["Unnamed: 4"]),
               non_compliant=int(rf["Unnamed: 5"]),goal_achieved=int(rf["Unnamed: 6"]),
+              residents_added=int(rf["Residents Added"]),
               end=int(rf["final(Current residents)"]))
     flow["discharged_total"]=(flow["deceased"]+flow["moved_out"]
                               +flow["non_compliant"]+flow["goal_achieved"])
@@ -344,6 +345,9 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
         (str(flow["discharged_total"]), "Discharged Total",
          f"Palliative {flow['deceased']}  ·  Moved {flow['moved_out']}  ·  Non-Comp. {flow['non_compliant']}  ·  Goal {flow['goal_achieved']}",
          H["lred"], f"{mortality_pct}% of opening census", H["red"]),
+        (str(flow["residents_added"]), "Residents Added",
+         "New residents added mid-quarter", H["lgreen"],
+         f"+{flow['residents_added']} this quarter", H["green"]),
         (str(flow["non_compliant"]), "Non-Compliant / Refusal",
          "Declined or refused PT services", H["lyellow"],
          None, None),
