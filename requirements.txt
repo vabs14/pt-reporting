@@ -1,0 +1,7 @@
+streamlit>=1.35
+pandas
+openpyxl
+python-docx
+matplotlib
+pillow
+numpy
