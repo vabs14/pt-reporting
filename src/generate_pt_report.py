@@ -104,11 +104,13 @@ plt.rcParams.update({"font.family":"DejaVu Sans","axes.spines.top":False,"axes.s
 
 # ── Charts ────────────────────────────────────────────────────────────────────
 def ch_flow(d):
-    s,a,dec,mv,e=d["start"],d["admissions"],d["deceased"],d["moved_out"],d["end"]
-    cats=["Opening\nCensus","Admissions","Deaths /\nPalliative","Moved\nOut","Closing\nCensus"]
-    hts=[s,a,dec,mv,e]; bots=[0,s,s+a-dec,s+a-dec-mv,0]
+    s,a,e=d["start"],d["admissions"],d["end"]
+    dec=d["deceased"]
+    other=d["moved_out"]+d["non_compliant"]+d["goal_achieved"]
+    cats=["Opening\nCensus","Admissions","Deaths /\nPalliative","Other\nDischarged","Closing\nCensus"]
+    hts=[s,a,dec,other,e]; bots=[0,s,s+a-dec,s+a-dec-other,0]
     cols=[MC["navy"],MC["green"],MC["red"],MC["amber"],MC["teal"]]
-    lbls=[str(s),f"+{a}",f"−{dec}",f"−{mv}",str(e)]
+    lbls=[str(s),f"+{a}",f"−{dec}",f"−{other}",str(e)]
     fig,ax=plt.subplots(figsize=(5.6,2.9)); fig.patch.set_facecolor(MC["bg"]); ax.set_facecolor(MC["bg"])
     for i,(h,b,c,l) in enumerate(zip(hts,bots,cols,lbls)):
         ax.bar(i,h,bottom=b,color=c,width=0.52,linewidth=0,zorder=3)
@@ -153,7 +155,7 @@ def ch_refass(ref_m,ass_m):
     fig.tight_layout(); return figbuf(fig)
 
 def ch_programs(d):
-    labels=["Ambulation","Wt. Bearing\n& Pre-Gait","Strengthening\n+ ROM","AAROM / PROM"]
+    labels=["Ambulation +\nStrength/Balance","Chest Physio /\nPain Modality","Strengthening\n+ ROM","AAROM / PROM"]
     vals=[d["ambulation"],d["wt_bearing"],d["strengthening"],d["arom_prom"]]
     colors=[MC["navy"],MC["teal"],MC["blue"],MC["lblue"]]
     fig,ax=plt.subplots(figsize=(3.8,2.8)); fig.patch.set_facecolor(MC["bg"]); ax.set_facecolor(MC["bg"])
@@ -201,14 +203,16 @@ def read_xl(path):
     rf=xl["Resident Flow"].iloc[1]
     flow=dict(start=int(rf["Start Residents"]),admissions=int(rf["Admissions"]),
               deceased=int(rf["Discharged(Total)"]),moved_out=int(rf["Unnamed: 4"]),
+              non_compliant=int(rf["Unnamed: 5"]),goal_achieved=int(rf["Unnamed: 6"]),
               end=int(rf["final(Current residents)"]))
-    flow["discharged_total"]=flow["deceased"]+flow["moved_out"]
+    flow["discharged_total"]=(flow["deceased"]+flow["moved_out"]
+                              +flow["non_compliant"]+flow["goal_achieved"])
     th=xl["Therapy Minutes"].iloc[0]
     therapy=dict(one2one=int(th["1:1 Minutes"]),evaluation=int(th["Evaluation Minutes"]),
-                 group_note=str(th["Group Sessions (count/notes)"]))
+                 group_sessions=int(th["Group Sessions (per week)"]))
     pr=xl["PT Programs"].iloc[0]
-    programs=dict(ambulation=int(pr["Ambulation"]),wt_bearing=int(pr["Weight Bearing/Pre-Gait"]),
-                  arom_prom=int(pr["AROM/PROM"]),strengthening=int(pr["Strengthening + ROM"]))
+    programs=dict(ambulation=int(pr["Ambulation + Strength/Balance"]),wt_bearing=int(pr["Chest Physio / Pain Modality"]),
+                  arom_prom=int(pr["AAROM/PROM"]),strengthening=int(pr["Strengthening + ROM"]))
     ra=xl["Referals"].iloc[0]
     referrals=dict(total=int(ra["Total Referrals"]),
                    monthly={"Jan":int(ra["Jan"]),"Feb":int(ra["Feb"]),"Mar":int(ra["Mar"])})
@@ -221,12 +225,13 @@ def read_xl(path):
     sm=xl["Summary Metrics"].iloc[0]
     summary=dict(pct_1on1=float(sm["% Residents on 1:1 PT"]),total_res=int(sm["Total Residents"]))
     tb=xl["total beds"]
+    total_beds=int(tb.columns[1])   # column header holds the facility capacity
     monthly_census={}
     for _,row in tb.iterrows():
         m=str(row.iloc[0]).strip(); v=row.iloc[1]
         if pd.notna(v) and m not in ["nan",""]: monthly_census[m]=int(v)
     quarter=str(xl["Resident Flow"]["Quarter"].iloc[1])
-    return flow,therapy,programs,referrals,assessments,staffing,summary,monthly_census,quarter
+    return flow,therapy,programs,referrals,assessments,staffing,summary,monthly_census,quarter,total_beds
 
 # ── PDF export ────────────────────────────────────────────────────────────────
 def to_pdf(docx_path):
@@ -255,7 +260,7 @@ def to_pdf(docx_path):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def generate(excel_path, home_name="Burton Manor, Brampton"):
-    flow,therapy,programs,referrals,assessments,staffing,summary,monthly_census,quarter=read_xl(excel_path)
+    flow,therapy,programs,referrals,assessments,staffing,summary,monthly_census,quarter,total_beds=read_xl(excel_path)
     mortality_pct=round(flow["deceased"]/flow["start"]*100,1)
     hrs_1on1=round(therapy["one2one"]/60,1); hrs_eval=round(therapy["evaluation"]/60,1)
     active_res=round(summary["pct_1on1"]/100*summary["total_res"])
@@ -328,39 +333,39 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
                 p4=c.add_paragraph(); sp(p4,8,0); p4.alignment=WD_ALIGN_PARAGRAPH.CENTER
                 rn(p4,badge,bold=True,sz=7.5,color=RGBColor.from_string(bcol))
 
-    krow([(str(flow["end"]),"Current Census",f"59 of 128 beds occupied",H["lblue"],f"↓ {flow['start']-flow['end']} from opening",H["mid"]),
-          (f"{summary['pct_1on1']}%","On Active 1:1 Rx",f"Of {summary['total_res']} current residents",H["lgreen"],"Strong coverage",H["green"]),
-          (str(flow["deceased"]),"Deaths / Palliative",f"{mortality_pct}% of opening census",H["lred"],"High-acuity quarter",H["red"]),
-          (str(referrals["total"]),"Total Referrals",f"Q1 2026",H["lyellow"],"Completed this quarter",H["amber"])])
+    # Row 1 — 5 tiles: census, 1:1 rx, discharged total (with breakdown), non-compliant, referrals
+    krow([
+        (str(flow["end"]),  "Current Census",
+         f"{flow['end']} of {total_beds} beds occupied", H["lblue"],
+         f"↓ {flow['start']-flow['end']} from opening", H["mid"]),
+        (f"{summary['pct_1on1']}%", "On Active 1:1 Rx",
+         f"Of {summary['total_res']} current residents", H["lgreen"],
+         "Strong coverage", H["green"]),
+        (str(flow["discharged_total"]), "Discharged Total",
+         f"Palliative {flow['deceased']}  ·  Moved {flow['moved_out']}  ·  Non-Comp. {flow['non_compliant']}  ·  Goal {flow['goal_achieved']}",
+         H["lred"], f"{mortality_pct}% of opening census", H["red"]),
+        (str(flow["non_compliant"]), "Non-Compliant / Refusal",
+         "Declined or refused PT services", H["lyellow"],
+         None, None),
+        (str(referrals["total"]), "Total Referrals",
+         f"{quarter}", H["lblue"],
+         "Completed this quarter", H["amber"]),
+    ])
     gap(doc,14)
-    krow([(str(assessments["total"]),"Total Assessments",f"Q1 2026",H["lgreen"],"Completed this quarter",H["green"]),
-          (f"{therapy['one2one']:,}","1:1 Therapy Min.","Direct therapy delivered",H["lblue"],None,None),
-          (f"{therapy['evaluation']:,}","Evaluation Min.","Assessment time",H["lblue"],None,None),
-          (f"{staffing['pta_total']}h","PTA Hours / Week","2 PTAs (1 FT + 1 PT)",H["lblue"],None,None),
-          (f"{staffing['pt_hours']}h","PT Hours / Week","Mon, Tue, Thu",H["lyellow"],"3 days / week",H["amber"])])
+    # Row 2 — 5 tiles: assessments, 1:1 min, eval min, PTA hrs, PT hrs
+    krow([
+        (str(assessments["total"]), "Total Assessments",
+         f"{quarter}", H["lgreen"], "Completed this quarter", H["green"]),
+        (f"{therapy['one2one']:,}", "1:1 Therapy Min.",
+         "Direct therapy delivered", H["lblue"], None, None),
+        (f"{therapy['evaluation']:,}", "Evaluation Min.",
+         "Assessment time", H["lblue"], None, None),
+        (f"{staffing['pta_total']}h", "PTA Hours / Week",
+         "2 PTAs (1 FT + 1 PT)", H["lblue"], None, None),
+        (f"{staffing['pt_hours']}h", "PT Hours / Week",
+         "Mon, Tue, Thu", H["lyellow"], "3 days / week", H["amber"]),
+    ])
     gap(doc,50)
-
-    # ── SERVICE HIGHLIGHTS ────────────────────────────────────────────────────
-    # Two-column teal highlight banner
-    hl_w = [4680, 4680]
-    hl_t = mtbl(doc, 2, hl_w)
-    hl_t.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    bullets = [
-        "A & G Physiotherapy Inc. provides ADP (Assistive Devices Program) services to eligible residents.",
-        "PT assesses all new residents on admission and completes Quarterly Assessments. The team participates in Daily Huddles, Falls Meetings, MDS, PT + NRCC Meetings and Care Conferences, and follows up on all referrals as required.",
-    ]
-    for ci, txt in enumerate(bullets):
-        c = hl_t.cell(0, ci)
-        cell_setup(c, hl_w[ci], fill=H["lblue"],
-                   margins=(110, 110, 160, 160),
-                   borders=dict(top=THIN(H["teal"]), bottom=THIN(H["teal"]),
-                                left=THIN(H["teal"]), right=THIN(H["teal"])))
-        p = c.paragraphs[0]; nos(p)
-        # Teal bullet dot
-        rn(p, "● ", bold=True, sz=9, color=TEAL)
-        rn(p, txt, sz=8.5, color=DARK)
-    gap(doc, 46)
 
     # ── RESIDENT FLOW ─────────────────────────────────────────────────────────
     sec(doc,f"Resident Flow — {quarter}"); gap(doc,44)
@@ -380,7 +385,24 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
         f"Monthly census: **Jan {list(monthly_census.values())[0]}**, "
         f"**Feb {list(monthly_census.values())[1]}**, **Mar {list(monthly_census.values())[2]}** residents.",
         sz=8.5,color=MID)
-    gap(doc,50)
+    gap(doc,28)
+
+    # ── SERVICE HIGHLIGHTS — single full-width column ─────────────────────────
+    shl_bullets = [
+        ("● ", "A & G Physiotherapy Inc. provides ADP (Assistive Devices Program) services to eligible residents."),
+        ("● ", "PT assesses all new residents on admission and completes Quarterly Assessments. The team participates in Daily Huddles, Falls Meetings, MDS, PT + NRCC Meetings and Care Conferences, and follows up on all referrals as required."),
+    ]
+    shl_t = mtbl(doc, 1, [TW])
+    shl_c = shl_t.cell(0, 0)
+    cell_setup(shl_c, TW, fill=H["lblue"], margins=(120, 120, 200, 200),
+               borders=dict(top=THIN(H["teal"]), bottom=THIN(H["teal"]),
+                            left=THIN(H["teal"]), right=THIN(H["teal"])))
+    for idx, (dot, txt) in enumerate(shl_bullets):
+        p = shl_c.paragraphs[0] if idx == 0 else shl_c.add_paragraph()
+        sp(p, 0 if idx == 0 else 10, 0)
+        rn(p, dot, bold=True, sz=9, color=TEAL)
+        rn(p, txt, sz=8.5, color=DARK)
+    gap(doc, 50)
 
     # ── PT REFERRALS AND ASSESSMENT — page 2 ─────────────────────────────────
     # Page break
@@ -475,12 +497,12 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
     # Caption row: 3 columns
     cw3=TW//3
     captions=[
-        f"**Ambulation** {programs['ambulation']} ({round(programs['ambulation']/prog_total*100)}%), "
-        f"**Wt. Bearing** {programs['wt_bearing']}, **Strengthening** {programs['strengthening']}, "
+        f"**Ambulation + Strength/Balance** {programs['ambulation']} ({round(programs['ambulation']/prog_total*100)}%), "
+        f"**Chest Physio / Pain Modality** {programs['wt_bearing']}, **Strengthening + ROM** {programs['strengthening']}, "
         f"**AAROM/PROM** {programs['arom_prom']} residents.",
         f"**{therapy['one2one']:,} min** 1:1 therapy (~{hrs_1on1} hrs). "
         f"**{therapy['evaluation']:,} min** evaluations (~{hrs_eval} hrs). "
-        f"{therapy['group_note'].capitalize()}.",
+        f"**{therapy['group_sessions']} group sessions** per week.",
         f"PTA: **{staffing['pta_1on1']}h/wk** 1:1 + **{staffing['pta_group']}h/wk** group = **{staffing['pta_total']}h/wk** total. "
         f"PT: **{staffing['pt_hours']}h/wk** (Mon, Tue, Thu).",
     ]
