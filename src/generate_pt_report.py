@@ -209,7 +209,7 @@ def read_xl(path):
                               +flow["non_compliant"]+flow["goal_achieved"])
     th=xl["Therapy Minutes"].iloc[0]
     therapy=dict(one2one=int(th["1:1 Minutes"]),evaluation=int(th["Evaluation Minutes"]),
-                 group_sessions=int(th["Group Sessions (per week)"]))
+                 group_sessions=int(th.get("Group Sessions (per week)", th.get("Group Sessions (count/notes)", 0))))
     pr=xl["PT Programs"].iloc[0]
     programs=dict(ambulation=int(pr["Ambulation + Strength/Balance"]),wt_bearing=int(pr["Chest Physio / Pain Modality"]),
                   arom_prom=int(pr["AAROM/PROM"]),strengthening=int(pr["Strengthening + ROM"]))
