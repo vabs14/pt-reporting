@@ -3,7 +3,10 @@
     "allow": [
       "Bash(/opt/homebrew/bin/python3 -c ' *)",
       "Bash(/opt/homebrew/bin/python3 src/generate_pt_report.py \"data/PT_Q2_2026_Henley House.xlsx\" \"Henley House\")",
-      "Bash(/opt/homebrew/bin/python3 src/generate_pt_report.py \"/private/tmp/claude-501/-Users-vabs-Documents-GitHub-pt-reporting/3e76f2d4-8b2c-4116-bb1b-7bae972361c6/scratchpad/PT_Q3_test.xlsx\" \"Henley House\")"
+      "Bash(/opt/homebrew/bin/python3 src/generate_pt_report.py \"/private/tmp/claude-501/-Users-vabs-Documents-GitHub-pt-reporting/3e76f2d4-8b2c-4116-bb1b-7bae972361c6/scratchpad/PT_Q3_test.xlsx\" \"Henley House\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
