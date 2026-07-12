@@ -16,6 +16,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+from PIL import Image
 
 NAVY  = RGBColor(0x1B,0x3A,0x6B); TEAL  = RGBColor(0x1A,0x7A,0x8A)
 WHITE = RGBColor(0xFF,0xFF,0xFF); DARK  = RGBColor(0x2C,0x3E,0x50)
@@ -97,8 +98,17 @@ def btext(doc,text,sz=8.5,color=None,before=0,after=36):
 
 def figbuf(fig):
     buf=io.BytesIO()
-    fig.savefig(buf,format="png",dpi=160,bbox_inches="tight",facecolor=fig.get_facecolor())
+    fig.savefig(buf,format="png",dpi=220,bbox_inches="tight",facecolor=fig.get_facecolor())
     plt.close(fig); buf.seek(0); return buf
+
+def pic(p,buf,width_in):
+    """Insert buf into paragraph p at width_in, height derived from the image's
+    real pixel aspect ratio so it's never stretched/squished (bbox_inches="tight"
+    means the saved PNG's aspect ratio doesn't exactly match the source figsize)."""
+    buf.seek(0); w_px,h_px=Image.open(buf).size; buf.seek(0)
+    h_in=width_in*h_px/w_px
+    p.add_run().add_picture(buf,width=Inches(width_in),height=Inches(h_in))
+    return h_in
 
 plt.rcParams.update({"font.family":"DejaVu Sans","axes.spines.top":False,"axes.spines.right":False})
 
@@ -112,11 +122,12 @@ def ch_flow(d):
     cols=[MC["navy"],MC["green"],MC["red"],MC["amber"],MC["teal"]]
     lbls=[str(s),f"+{a}",f"−{dec}",f"−{other}",str(e)]
     fig,ax=plt.subplots(figsize=(5.6,2.9)); fig.patch.set_facecolor(MC["bg"]); ax.set_facecolor(MC["bg"])
+    ylim_top=(s+a)*1.22; off=ylim_top*0.02
     for i,(h,b,c,l) in enumerate(zip(hts,bots,cols,lbls)):
         ax.bar(i,h,bottom=b,color=c,width=0.52,linewidth=0,zorder=3)
-        ax.text(i,b+h+0.5,l,ha="center",va="bottom",fontsize=9,fontweight="bold",color=c)
+        ax.text(i,b+h+off,l,ha="center",va="bottom",fontsize=9,fontweight="bold",color=c)
     ax.set_xticks(range(5)); ax.set_xticklabels(cats,fontsize=8)
-    ax.set_ylabel("Residents",fontsize=8.5,color="#555"); ax.set_ylim(0,(s+a)*1.22)
+    ax.set_ylabel("Residents",fontsize=8.5,color="#555"); ax.set_ylim(0,ylim_top)
     ax.yaxis.grid(True,color="#ddd",zorder=0); ax.set_axisbelow(True)
     ax.spines["left"].set_color("#ccc"); ax.spines["bottom"].set_color("#ccc")
     ax.set_title("Quarterly Resident Flow",fontsize=10,fontweight="bold",color=MC["navy"],pad=8)
@@ -126,28 +137,30 @@ def ch_census(monthly):
     months=list(monthly.keys()); vals=list(monthly.values())
     fig,ax=plt.subplots(figsize=(3.5,2.9)); fig.patch.set_facecolor(MC["bg"]); ax.set_facecolor(MC["bg"])
     bars=ax.bar(months,vals,color=MC["navy"],width=0.45,linewidth=0,zorder=3)
+    ylim_top=max(vals)*1.25; off=ylim_top*0.02
     for bar,v in zip(bars,vals):
-        ax.text(bar.get_x()+bar.get_width()/2,v+0.2,str(v),
+        ax.text(bar.get_x()+bar.get_width()/2,v+off,str(v),
                 ha="center",va="bottom",fontsize=10,fontweight="bold",color=MC["navy"])
-    ax.set_ylim(0,max(vals)*1.25); ax.yaxis.grid(True,color="#ddd",zorder=0); ax.set_axisbelow(True)
+    ax.set_ylim(0,ylim_top); ax.yaxis.grid(True,color="#ddd",zorder=0); ax.set_axisbelow(True)
     ax.spines["left"].set_color("#ccc"); ax.spines["bottom"].set_color("#ccc")
     ax.set_ylabel("Residents",fontsize=8.5,color="#555")
     ax.set_title("Monthly Census",fontsize=10,fontweight="bold",color=MC["navy"],pad=8)
     fig.tight_layout(); return figbuf(fig)
 
 def ch_refass(ref_m,ass_m):
-    months=["Jan","Feb","Mar"]
+    months=list(ref_m.keys())
     rv=[ref_m[m] for m in months]; av=[ass_m[m] for m in months]
     x=np.arange(3); w=0.35
     fig,ax=plt.subplots(figsize=(5.6,2.8)); fig.patch.set_facecolor(MC["bg"]); ax.set_facecolor(MC["bg"])
     b1=ax.bar(x-w/2,rv,w,color=MC["navy"],label="Referrals",linewidth=0,zorder=3)
     b2=ax.bar(x+w/2,av,w,color=MC["teal"],label="Assessments",linewidth=0,zorder=3)
+    ylim_top=max(max(rv),max(av))*1.35; off=ylim_top*0.02
     for bar,v in zip(b1,rv):
-        ax.text(bar.get_x()+bar.get_width()/2,v+0.3,str(v),ha="center",va="bottom",fontsize=9,fontweight="bold",color=MC["navy"])
+        ax.text(bar.get_x()+bar.get_width()/2,v+off,str(v),ha="center",va="bottom",fontsize=9,fontweight="bold",color=MC["navy"])
     for bar,v in zip(b2,av):
-        ax.text(bar.get_x()+bar.get_width()/2,v+0.3,str(v),ha="center",va="bottom",fontsize=9,fontweight="bold",color=MC["teal"])
+        ax.text(bar.get_x()+bar.get_width()/2,v+off,str(v),ha="center",va="bottom",fontsize=9,fontweight="bold",color=MC["teal"])
     ax.set_xticks(x); ax.set_xticklabels(months,fontsize=9.5)
-    ax.set_ylabel("Count",fontsize=8.5,color="#555"); ax.set_ylim(0,max(max(rv),max(av))*1.35)
+    ax.set_ylabel("Count",fontsize=8.5,color="#555"); ax.set_ylim(0,ylim_top)
     ax.yaxis.grid(True,color="#ddd",zorder=0); ax.set_axisbelow(True)
     ax.spines["left"].set_color("#ccc"); ax.spines["bottom"].set_color("#ccc")
     ax.legend(fontsize=8,frameon=False,loc="upper left")
@@ -187,10 +200,11 @@ def ch_workforce(d):
     ax.bar(x,o,color=MC["navy"],width=0.45,bottom=g,label=f"1:1 ({d['pta_1on1']}h)",linewidth=0,zorder=3)
     ax.bar(x,p,color=MC["blue"],width=0.45,bottom=[a+b for a,b in zip(g,o)],
            label=f"PT ({d['pt_hours']}h)",linewidth=0,zorder=3)
+    ylim_top=max(totals)*1.35; off=ylim_top*0.03
     for xi,tot in zip(x,totals):
-        ax.text(xi,tot+0.4,f"{tot}h/wk",ha="center",fontsize=9,fontweight="bold",color="#333")
+        ax.text(xi,tot+off,f"{tot}h/wk",ha="center",va="bottom",fontsize=9,fontweight="bold",color="#333")
     ax.set_xticks(x); ax.set_xticklabels(roles,fontsize=10)
-    ax.set_ylabel("Hours / Week",fontsize=8.5,color="#555"); ax.set_ylim(0,max(totals)*1.30)
+    ax.set_ylabel("Hours / Week",fontsize=8.5,color="#555"); ax.set_ylim(0,ylim_top)
     ax.yaxis.grid(True,color="#ddd",zorder=0); ax.set_axisbelow(True)
     ax.spines["left"].set_color("#ccc"); ax.spines["bottom"].set_color("#ccc")
     ax.legend(fontsize=7.5,frameon=False,loc="upper right")
@@ -215,11 +229,13 @@ def read_xl(path):
     programs=dict(ambulation=int(pr["Ambulation + Strength/Balance"]),wt_bearing=int(pr["Chest Physio / Pain Modality"]),
                   arom_prom=int(pr["AAROM/PROM"]),strengthening=int(pr["Strengthening + ROM"]))
     ra=xl["Referals"].iloc[0]
+    ref_months=[c for c in ra.index if c not in ("Quarter","Total Referrals")]
     referrals=dict(total=int(ra["Total Referrals"]),
-                   monthly={"Jan":int(ra["Jan"]),"Feb":int(ra["Feb"]),"Mar":int(ra["Mar"])})
+                   monthly={m:int(ra[m]) for m in ref_months})
     aa=xl["Assesments"].iloc[0]
+    ass_months=[c for c in aa.index if c not in ("Quarter","Total Assessments")]
     assessments=dict(total=int(aa["Total Assessments"]),
-                     monthly={"Jan":int(aa["Jan"]),"Feb":int(aa["Feb"]),"Mar":int(aa["Mar"])})
+                     monthly={m:int(aa[m]) for m in ass_months})
     st=xl["Staffing"].iloc[0]
     staffing=dict(pta_total=float(st["PTA Hours (Total)"]),pta_1on1=float(st["PTA 1:1 Hours"]),
                   pta_group=float(st["PTA Group Hours"]),pt_hours=float(st["PT Hours"]))
@@ -377,17 +393,16 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
     lc2=t2.cell(0,0); rc2=t2.cell(0,1)
     cell_setup(lc2,5400,borders=NB(),margins=(30,30,0,50)); cell_setup(rc2,3960,borders=NB(),margins=(30,30,50,0))
     p=lc2.paragraphs[0]; nos(p); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_flow.seek(0); p.add_run().add_picture(b_flow,width=Inches(3.6),height=Inches(2.0))
+    pic(p,b_flow,3.6)
     p=rc2.paragraphs[0]; nos(p); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_census.seek(0); p.add_run().add_picture(b_census,width=Inches(2.6),height=Inches(2.0))
+    pic(p,b_census,2.6)
     gap(doc,16)
     btext(doc,
         f"The quarter opened with **{flow['start']} residents** and closed at **{flow['end']}**. "
         f"**{flow['admissions']} new admissions** were received. "
         f"**{flow['deceased']} residents** passed away or moved to palliative care ({mortality_pct}% of opening census), "
         f"and **{flow['moved_out']}** moved out. "
-        f"Monthly census: **Jan {list(monthly_census.values())[0]}**, "
-        f"**Feb {list(monthly_census.values())[1]}**, **Mar {list(monthly_census.values())[2]}** residents.",
+        f"Monthly census: {', '.join(f'**{m[:3]} {v}**' for m,v in monthly_census.items())} residents.",
         sz=8.5,color=MID)
     gap(doc,28)
 
@@ -424,8 +439,9 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
         p=cell.paragraphs[0]; nos(p); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
         rn(p,str(text),bold=bold,sz=9,color=tcol or DARK)
 
-    ref_row=[referrals["monthly"]["Jan"],referrals["monthly"]["Feb"],referrals["monthly"]["Mar"],referrals["total"]]
-    ass_row=[assessments["monthly"]["Jan"],assessments["monthly"]["Feb"],assessments["monthly"]["Mar"],assessments["total"]]
+    ref_months=list(referrals["monthly"].keys()); ass_months=list(assessments["monthly"].keys())
+    ref_row=[referrals["monthly"][m] for m in ref_months]+[referrals["total"]]
+    ass_row=[assessments["monthly"][m] for m in ass_months]+[assessments["total"]]
 
     # Outer 2-col: chart left (5040) | breakdown table right (4320) = 9360
     CW=5040; TBW=4320
@@ -435,12 +451,12 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
     cell_setup(tbl_cell,TBW,borders=NB(),margins=(20,20,80,0),valign="center")
 
     pc=chart_cell.paragraphs[0]; nos(pc); pc.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_ra.seek(0); pc.add_run().add_picture(b_ra,width=Inches(3.4),height=Inches(2.1))
+    pic(pc,b_ra,3.4)
 
     # Inner breakdown table — columns sum to 4100 DXA (fits inside 4320 cell with margins)
     col_w_n=[1080,760,760,760,740]   # total = 4100
     inner_w=sum(col_w_n)
-    months_hdr=["Jan","Feb","Mar","Total"]
+    months_hdr=ref_months+["Total"]
 
     inner=doc.add_table(rows=1,cols=5)
     inner.alignment=WD_TABLE_ALIGNMENT.LEFT
@@ -479,22 +495,15 @@ def generate(excel_path, home_name="Burton Manor, Brampton"):
 
     # Left: donut chart
     p=lc4.paragraphs[0]; nos(p); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_prog.seek(0); p.add_run().add_picture(b_prog,width=Inches(2.9),height=Inches(2.6))
+    pic(p,b_prog,2.9)
 
-    # Right: therapy + workforce side by side inside a nested structure
-    # Use a sub-table in right cell
-    def add_img_to_cell(cell, buf, wi, hi):
-        p=cell.paragraphs[0]; nos(p); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        buf.seek(0); p.add_run().add_picture(buf,width=Inches(wi),height=Inches(hi))
-
-    # Add therapy chart
+    # Right: therapy + workforce stacked
     p2=rc4.paragraphs[0]; nos(p2); p2.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_min.seek(0); p2.add_run().add_picture(b_min,width=Inches(3.1),height=Inches(1.5))
+    pic(p2,b_min,3.1)
     # Add small gap
     pg=rc4.add_paragraph(); sp(pg,14,0)
-    # Add workforce chart
     p3=rc4.add_paragraph(); nos(p3); p3.alignment=WD_ALIGN_PARAGRAPH.CENTER
-    b_work.seek(0); p3.add_run().add_picture(b_work,width=Inches(3.1),height=Inches(1.5))
+    pic(p3,b_work,3.1)
 
     gap(doc,20)
 
@@ -547,4 +556,16 @@ if __name__=="__main__":
             print("No Excel file found in ../data/ — pass the path as an argument."); sys.exit(1)
         excel_path=candidates[0]
         print(f"Using: {os.path.basename(excel_path)}")
-    generate(excel_path)
+    if len(sys.argv)>=3:
+        home_name=sys.argv[2]
+    else:
+        stem=os.path.splitext(os.path.basename(excel_path))[0]
+        m=re.match(r"^PT_Q\d_\d{4}_(.+)$",stem,re.IGNORECASE)
+        if m:
+            home_name=m.group(1).replace("_"," ").strip()
+            print(f"Facility (from filename): {home_name}")
+        else:
+            home_name="Burton Manor, Brampton"
+            print(f"Could not parse facility name from filename — defaulting to \"{home_name}\". "
+                  f"Pass it explicitly as a 2nd argument to override.")
+    generate(excel_path, home_name=home_name)
