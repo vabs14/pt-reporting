@@ -4,7 +4,7 @@ Usage:  python generate_pt_report.py YourFile.xlsx
 Output: PT_Q1_2026_Report.docx  (same folder as script)
 Needs:  pip install pandas openpyxl python-docx matplotlib pillow
 """
-import sys, os, io, subprocess, re
+import sys, os, io, subprocess, re, struct
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -16,7 +16,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from PIL import Image
 
 NAVY  = RGBColor(0x1B,0x3A,0x6B); TEAL  = RGBColor(0x1A,0x7A,0x8A)
 WHITE = RGBColor(0xFF,0xFF,0xFF); DARK  = RGBColor(0x2C,0x3E,0x50)
@@ -101,11 +100,17 @@ def figbuf(fig):
     fig.savefig(buf,format="png",dpi=220,bbox_inches="tight",facecolor=fig.get_facecolor())
     plt.close(fig); buf.seek(0); return buf
 
+def _png_size(buf):
+    """Width/height (px) from a PNG's IHDR chunk — avoids depending on Pillow's
+    native decoder just to read two integers."""
+    pos=buf.tell(); buf.seek(0); header=buf.read(24); buf.seek(pos)
+    return struct.unpack(">II",header[16:24])
+
 def pic(p,buf,width_in):
     """Insert buf into paragraph p at width_in, height derived from the image's
     real pixel aspect ratio so it's never stretched/squished (bbox_inches="tight"
     means the saved PNG's aspect ratio doesn't exactly match the source figsize)."""
-    buf.seek(0); w_px,h_px=Image.open(buf).size; buf.seek(0)
+    buf.seek(0); w_px,h_px=_png_size(buf); buf.seek(0)
     h_in=width_in*h_px/w_px
     p.add_run().add_picture(buf,width=Inches(width_in),height=Inches(h_in))
     return h_in
